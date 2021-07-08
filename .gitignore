@@ -1,0 +1,52 @@
+# Compiled class file
+*.class
+
+# Log file
+*.log
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+.DS_Store
+
+.settings
+.project
+.gradle
+build/
+bin/
+out/
+*.iml
+*.ipr
+*.iws
+*.idea
+.factorypath
+pom.xml
+target/
+db/
+starth2
+.gradletasknamecache
+.sass-cache/
+.jruby/
+ratpack-groovy/Expression$*.class
+/.java-version
+Expression$*.class
+ratpack-lazybones/templates/**/VERSION
+ratpack-version.txt
+deploy
+.jruby-container
