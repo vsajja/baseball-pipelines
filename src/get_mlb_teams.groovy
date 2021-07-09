@@ -8,27 +8,6 @@ def MLB_STATS_API_BASE_URL = 'https://statsapi.mlb.com/api/v1'
 @Field
 def MLB_SPORT_CODE = 1
 
-// league ids
-@Field
-def int AL = 103
-@Field
-def int NL = 104
-
-// AL division ids
-@Field
-def AL_EAST = 201
-@Field
-def AL_CENTRAL = 202
-@Field
-def AL_WEST = 200
-
-@Field
-def NL_EAST = 204
-@Field
-def NL_CENTRAL = 205
-@Field
-def NL_WEST = 203
-
 @Field
 def mlbTeams = []
 
@@ -41,11 +20,11 @@ node('master') {
     }
 
     stage('SaveTeams') {
-        writeFile file: 'mlbTeams.json', text: new JsonBuilder(mlbTeams).toPrettyString()
+        writeFile file: 'mlb-teams.json', text: new JsonBuilder(mlbTeams).toPrettyString()
     }
 
     stage('ArchiveTeams') {
-        archiveArtifacts artifacts: 'mlbTeams.json', onlyIfSuccessful: true
+        archiveArtifacts artifacts: 'mlb-teams.json', onlyIfSuccessful: true
     }
 }
 

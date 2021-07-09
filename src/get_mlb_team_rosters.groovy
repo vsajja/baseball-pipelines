@@ -1,9 +1,6 @@
 import groovy.json.JsonBuilder
 import groovy.json.JsonSlurperClassic
 
-import java.sql.Timestamp
-import java.text.SimpleDateFormat
-
 import groovy.transform.Field
 
 @Field
@@ -16,12 +13,11 @@ def MLB_SPORT_CODE = 1
 def mlbTeams = []
 
 node('master') {
-    stage('GetBlueJays') {
-        build wait: false, job: 'get-mlb-teams'
+    stage('GetTeams') {
+        // get all artifacts from last successful build
+        copyArtifacts(projectName: 'get-mlb-teams')
 
-        copyArtifacts filter: 'mlbTeams.json', fingerprintArtifacts: true, projectName: 'get-mlb-teams'
-
-        def mlbTeamsJsonStr = readFile('mlbTeams.json')
+        def mlbTeamsJsonStr = readFile('mlb-teams.json')
 
         mlbTeams = new JsonSlurperClassic().parseText(mlbTeamsJsonStr)
 
@@ -30,7 +26,7 @@ node('master') {
         }
     }
 
-    stage('SaveTeams') {
+    stage('GetRosters') {
         mlbTeams.each { mlbTeam ->
             def mlbTeamId = mlbTeam['id']
             // get 40 man roster
@@ -42,7 +38,7 @@ node('master') {
         }
     }
 
-    stage('ArchiveTeams') {
+    stage('ArchiveRosters') {
         mlbTeams.each { mlbTeam ->
             def artifactName = "${mlbTeam['abbreviation']}-roster.json"
             println "Archiving file: ${artifactName}"
@@ -83,6 +79,8 @@ def getMlbRoster(def mlbTeamId) {
         String bats = playerInfo['people']['batSide']['code'][0]
 
         return [
+                'mlbPlayerId' : mlbPlayerId,
+                'jerseyNumber': jerseyNumber,
                 'nameFirst'   : nameFirst,
                 'nameLast'    : nameLast,
                 'birthDate'   : birthDate,
