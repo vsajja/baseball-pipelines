@@ -53,40 +53,84 @@ node('master') {
     }
 
     stage('GetCatchers') {
-        //        [P, C, 3B, CF, 2B, RF, 1B, SS, LF, OF, DH]
+        catchers = mlbPlayers.findAll { it['position'] == 'C' }
 
-        catchers = mlbPlayers.findAll {it['position'] == 'C'}
+        def ratedCatchers = getRatedCatchers(catchers)
 
-        catchers.each { catcher ->
-            println "${catcher['nameFirst']} ${catcher['nameLast']}"
-            assert hittingStats.get(catcher['mlbPlayerId'].toString()) != null
-            println hittingStats.get(catcher['mlbPlayerId'].toString())
-        }
+        // catchers rated by their roto score
+        println ratedCatchers.collect {
+            return "${it['nameFirst']} ${it['nameLast']} ${it['rotoScore']} ${it['zScore']}"
+        }.join('\n')
     }
 }
 
-//def ratePlayer(player, hittingStats) {
-//    println "Rating: ${player}"
-//
-//    def currentYear = 2021
-//
-//    // current year
-//    def seasonHittingStats = hittingStats.find {
-//        it['season'] == 2021
-//    }
-//
-//    assert seasonHittingStats != null
-//
-//    def season = seasonHittingStats['season']
-//
-//    def atBats = seasonHittingStats['atBats']
-//
-//    def runs = seasonHittingStats['runs']
-//    def homeRuns = seasonHittingStats['homeRuns']
-//    def rbis = seasonHittingStats['rbis']
-//    def stolenBases = seasonHittingStats['stolenBases']
-//    def avg = seasonHittingStats['avg']
-//
+@NonCPS
+def getRatedCatchers(catchers) {
+    // add roto score
+    catchers = catchers.collect { catcher ->
+        println "${catcher['nameFirst']} ${catcher['nameLast']}"
+        assert hittingStats.get(catcher['mlbPlayerId'].toString()) != null
+
+        // current year
+        def seasonHittingStats = hittingStats.get(catcher['mlbPlayerId'].toString()).find {
+            it['season'] == 2021
+        }
+
+        catcher.put('seasonHittingStats', seasonHittingStats)
+        catcher.put('rotoScore', getRotoScore(seasonHittingStats))
+
+        return catcher
+    }.sort { a, b -> b.rotoScore <=> a.rotoScore }
+
+    // variables to calculate standard deviation
+    def rotoScores = catchers.collect { it['rotoScore'] }
+    def rotoScoresSquared = rotoScores.collect { it * it }
+    def rotoScoresSquaredSum = rotoScoresSquared.sum()
+
+    def populationSize = rotoScores.size()
+
+    def totalRotoScoresSquared = rotoScores.sum() * rotoScores.sum()
+
+    def standardDeviation = Math.sqrt(
+            (((populationSize * rotoScoresSquaredSum) - totalRotoScoresSquared) / (populationSize * populationSize)).doubleValue()
+    )
+    def mean = rotoScores.sum() / rotoScores.size()
+
+    // add z-score
+    catchers = catchers.collect { catcher ->
+        println "${catcher['nameFirst']} ${catcher['nameLast']}"
+
+        def zScore = ((catcher['rotoScore'] - mean) / standardDeviation)
+        println zScore
+
+        catcher.put('zScore', zScore)
+
+        return catcher
+    }.sort { a, b -> b.zScore <=> a.zScore }
+
+    return catchers
+}
+
+@NonCPS
+def getRotoScore(seasonHittingStats) {
+    if (seasonHittingStats == null) {
+        return 0
+    }
+
+    def season = seasonHittingStats['season']
+
+    assert season == 2021
+
+    def atBats = seasonHittingStats['atBats']
+
+    def runs = seasonHittingStats['runs']
+    def homeRuns = seasonHittingStats['homeRuns']
+    def rbis = seasonHittingStats['rbis']
+    def stolenBases = seasonHittingStats['stolenBases']
+    def avg = seasonHittingStats['avg']
+
+    return (avg * atBats) + (3 * runs) + (12 * homeRuns) + (3.5 * rbis) + (6 * stolenBases)
+
 //    def playerRanking =  (runs + homeRuns + rbis + stolenBases + avg)
 //
 //
@@ -114,5 +158,6 @@ node('master') {
 ////    seasonHittingStats['babip']
 ////    seasonHittingStats['intentionalWalks']
 ////    seasonHittingStats['groundIntoDoublePlay']
-//}
+}
+
 
