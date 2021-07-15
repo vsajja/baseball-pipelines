@@ -159,6 +159,7 @@ node('master') {
         allPlayers.addAll(catchers)
         allPlayers.addAll(firstBaseman)
         allPlayers.addAll(secondBaseman)
+        allPlayers.addAll(shortStops)
         allPlayers.addAll(thirdBaseman)
         allPlayers.addAll(outFielders)
         allPlayers.addAll(pitchers)
