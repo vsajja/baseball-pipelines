@@ -64,27 +64,24 @@ node('master') {
         copyArtifacts filter: '*.json', fingerprintArtifacts: true, projectName: 'get-mlb-player-hitting-stats'
         copyArtifacts filter: '*.json', fingerprintArtifacts: true, projectName: 'get-mlb-player-pitching-stats'
 
-//        mlbTeams.each { mlbTeam ->
-//            def teamCode = mlbTeam['abbreviation']
-//
-//            //
-//        }
+        mlbTeams.each { mlbTeam ->
+            def teamCode = mlbTeam['abbreviation']
+            // def teamCode = 'LAA'
 
-        def teamCode = 'LAA'
+            def teamRosterJsonStr = readFile("${teamCode}-roster.json")
+            def teamHittingStatsJsonStr = readFile("${teamCode}-hitting-stats.json")
+            def teamPitchingStatsJsonStr = readFile("${teamCode}-pitching-stats.json")
 
-        def teamRosterJsonStr = readFile("${teamCode}-roster.json")
-        def teamHittingStatsJsonStr = readFile("${teamCode}-hitting-stats.json")
-        def teamPitchingStatsJsonStr = readFile("${teamCode}-pitching-stats.json")
+            def teamRoster = new JsonSlurperClassic().parseText(teamRosterJsonStr)
+            def teamHittingStats = new JsonSlurperClassic().parseText(teamHittingStatsJsonStr)
+            def teamPitchingStats = new JsonSlurperClassic().parseText(teamPitchingStatsJsonStr)
 
-        def teamRoster = new JsonSlurperClassic().parseText(teamRosterJsonStr)
-        def teamHittingStats = new JsonSlurperClassic().parseText(teamHittingStatsJsonStr)
-        def teamPitchingStats = new JsonSlurperClassic().parseText(teamPitchingStatsJsonStr)
+            mlbPlayers.addAll(teamRoster)
+            hittingStats.putAll(teamHittingStats)
+            pitchingStats.putAll(teamPitchingStats)
 
-        mlbPlayers.addAll(teamRoster)
-        hittingStats.putAll(teamHittingStats)
-        pitchingStats.putAll(teamPitchingStats)
-
-        println mlbPlayers.collect { it['position'] }.unique()
+            println mlbPlayers.collect { it['position'] }.unique()
+        }
     }
 
     stage('GetCatchers') {
@@ -153,7 +150,7 @@ node('master') {
 
         def ratedPlayers = getRatedPlayer(pitchers)
 
-        writeFile file: "P-rated.json", text: new JsonBuilder(pitchers).toPrettyString()
+        writeFile file: "P-rated.json", text: new JsonBuilder(ratedPlayers).toPrettyString()
     }
 
     stage('AllPlayers') {
@@ -176,10 +173,6 @@ node('master') {
     stage('PlayerRatings') {
         archiveArtifacts artifacts: "*-rated.json", onlyIfSuccessful: true
     }
-
-    // [P, C, 3B, CF, 2B, RF, 1B, SS, LF, OF, DH]
-
-    // [P, C, 3B, CF, 2B, RF, 1B, SS, LF, OF, DH]
 }
 
 @NonCPS
@@ -198,15 +191,25 @@ def getRatedPlayer(players) {
                 it['season'] == 2021
             }
 
+            // current year
+            def seasonPitchingStats = pitchingStats.get(catcher['mlbPlayerId'].toString()).find {
+                it['season'] == 2021
+            }
+
             catcher.put('seasonHittingStats', seasonHittingStats)
-            catcher.put('rotoScore',(double)0)
-            catcher.put('rotoScore', getRotoScore(seasonHittingStats))
+            catcher.put('seasonPitchingStats', seasonPitchingStats)
+            catcher.put('hittingScore', getHittingScore(seasonHittingStats))
+            catcher.put('pitchingScore', getPitchingScore(seasonPitchingStats))
+
+            double rotoScore = (double) (catcher['hittingScore'] + catcher['pitchingScore'])
+
+            catcher.put('rotoScore', rotoScore)
 
             return catcher
         }.sort { a, b -> b.rotoScore <=> a.rotoScore }
 
         // variables to calculate standard deviation
-        def rotoScores = players.collect { it['rotoScore'].toDouble() }
+        def rotoScores = players.collect { (it['hittingScore'].toDouble() + it['pitchingScore'].toDouble()) }
         def rotoScoresSquared = rotoScores.collect { it * it }
         def rotoScoresSquaredSum = rotoScoresSquared.sum()
 
@@ -223,11 +226,12 @@ def getRatedPlayer(players) {
         players = players.collect { catcher ->
             println "${catcher['nameFirst']} ${catcher['nameLast']}"
 
-    //        def zScore = ((catcher['rotoScore'] - mean) / standardDeviation)
-    //        println zScore
+            double rotoScore = (catcher['hittingScore'] + catcher['pitchingScore'])
 
-            catcher.put('zScore', 0)
+            def vScore = ((rotoScore - mean) / standardDeviation)
+            println vScore
 
+            catcher.put('vScore', vScore)
             return catcher
         }.sort { a, b -> b.zScore <=> a.zScore }
 
@@ -236,7 +240,7 @@ def getRatedPlayer(players) {
 }
 
 @NonCPS
-def getRotoScore(seasonHittingStats) {
+def getHittingScore(seasonHittingStats) {
     println seasonHittingStats
 
     if(seasonHittingStats != null) {
@@ -281,4 +285,28 @@ def getRotoScore(seasonHittingStats) {
 ////    seasonHittingStats['babip']
 ////    seasonHittingStats['intentionalWalks']
 ////    seasonHittingStats['groundIntoDoublePlay']
+}
+
+@NonCPS
+def getPitchingScore(seasonPitchingStats) {
+    println seasonPitchingStats
+
+    if(seasonPitchingStats != null) {
+        def season = seasonPitchingStats['season']
+
+        assert season == 2021
+
+        int wins = seasonPitchingStats['wins']
+        double inningsPitched = Double.parseDouble(seasonPitchingStats['inningsPitched']).doubleValue()
+        int saves = seasonPitchingStats['saves']
+        double earnedRuns = seasonPitchingStats['earnedRuns']
+        double baseOnBalls = seasonPitchingStats['baseOnBalls']
+        double hits = seasonPitchingStats['hits']
+
+        int strikeOuts = (int) seasonPitchingStats['strikeOuts']
+
+        return (5 * strikeOuts) + (3 * inningsPitched) + (10 * wins) + (15 * saves) - (4 * baseOnBalls) - (3 * hits) - (4 * earnedRuns)
+    } else {
+        return 0;
+    }
 }
