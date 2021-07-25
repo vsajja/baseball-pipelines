@@ -32,53 +32,52 @@ node('master') {
         // get all artifacts from last successful build
         copyArtifacts projectName: 'get-mlb-team-rosters'
 
-//        mlbTeams.each { mlbTeam ->
-//             def teamCode = mlbTeam['abbreviation']
-//        }
+        mlbTeams.each { mlbTeam ->
+            def teamCode = mlbTeam['abbreviation']
 
-        def teamCode = 'LAA'
+            def rosterJsonStr = readFile("${teamCode}-roster.json")
 
-        def rosterJsonStr = readFile("${teamCode}-roster.json")
+            roster = new JsonSlurperClassic().parseText(rosterJsonStr)
 
-        roster = new JsonSlurperClassic().parseText(rosterJsonStr)
+            def fileName = "${teamCode}-hitting-stats.json"
 
-        def fileName = "${teamCode}-hitting-stats.json"
+            def hittingStats = [:]
 
-        def hittingStats = [:]
+            roster.each { player ->
 
-        roster.each { player ->
+                def mlbPlayerId = player['mlbPlayerId']
 
-            def mlbPlayerId = player['mlbPlayerId']
+                def stats = getPlayerHittingStats(mlbPlayerId)
 
-            def stats = getPlayerHittingStats(mlbPlayerId)
+                println stats.collect {
+                    def season = it['season']
 
-            println stats.collect {
-                def season = it['season']
+                    def teamId = it['mlbTeamId']
 
-                def teamId = it['mlbTeamId']
+                    def team = mlbTeams.find {
+                        it['id'] == teamId
+                    }
 
-                def team = mlbTeams.find {
-                    it['id'] == teamId
-                }
+                    def games = it['games']
+                    def atBats = it['atBats']
+                    def runs = it['runs']
+                    def homeRuns = it['homeRuns']
+                    def rbis = it['rbis']
+                    def stolenBases = it['stolenBases']
+                    def avg = it['avg']
+                    def obp = it['obp']
+                    def slg = it['slg']
+                    def ops = it['ops']
 
-                def games = it['games']
-                def atBats = it['atBats']
-                def runs = it['runs']
-                def homeRuns = it['homeRuns']
-                def rbis = it['rbis']
-                def stolenBases = it['stolenBases']
-                def avg = it['avg']
-                def obp = it['obp']
-                def slg = it['slg']
-                def ops = it['ops']
+                    return "${season} ${team != null ? team['abbreviation'] : null} ${games}G  ${atBats}AB ${runs}R ${homeRuns}HR ${rbis}RBI ${stolenBases}SB ${avg}/${obp}/${slg}/${ops}"
+                }.join('\n')
 
-                return "${season} ${team != null ? team['abbreviation'] : null} ${games}G  ${atBats}AB ${runs}R ${homeRuns}HR ${rbis}RBI ${stolenBases}SB ${avg}/${obp}/${slg}/${ops}"
-            }.join('\n')
+                hittingStats.put(player['mlbPlayerId'], stats)
+            }
 
-            hittingStats.put(player['mlbPlayerId'], stats)
+            println "Writing: $fileName"
+            writeFile file: fileName, text: new JsonBuilder(hittingStats).toPrettyString()
         }
-
-        writeFile file: fileName, text: new JsonBuilder(hittingStats).toPrettyString()
     }
 
     stage('ArchiveHittingStats') {
