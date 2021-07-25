@@ -3,11 +3,11 @@ import groovy.json.JsonSlurperClassic
 
 import groovy.transform.Field
 
-@Field
-def server = 'http://localhost:5051/api/v1/fantasy-baseball'
-
 // @Field
-// def server = 'https://baseballsite.herokuapp.com/api/v1/fantasy-baseball'
+// def server = 'http://localhost:5051/api/v1/fantasy-baseball'
+
+@Field
+def server = 'https://baseballsite.herokuapp.com/api/v1/fantasy-baseball'
 
 @Field
 def mlbTeams = []
