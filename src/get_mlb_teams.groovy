@@ -2,11 +2,11 @@ import groovy.json.JsonBuilder
 import groovy.json.JsonSlurperClassic
 import groovy.transform.Field
 
-@Field
-def MLB_STATS_API_BASE_URL = 'https://statsapi.mlb.com/api/v1'
+//@Field
+//def server = 'http://localhost:5051/api/v1/fantasy-baseball'
 
 @Field
-def MLB_SPORT_CODE = 1
+def server = 'https://baseballsite.herokuapp.com/api/v1/fantasy-baseball'
 
 @Field
 def mlbTeams = []
@@ -29,28 +29,9 @@ node('master') {
 }
 
 def getMlbTeams() {
-    String jsonStr = "$MLB_STATS_API_BASE_URL/teams?sportCode=${MLB_SPORT_CODE}".toURL().text
+    String jsonStr = "$server/mlb/teams".toURL().text
 
-    def teamsObj = new JsonSlurperClassic().parseText(jsonStr)
-
-    def mlbTeams = teamsObj['teams'].findAll {
-        it['league'] &&
-                it['division'] &&
-                it['sport'] &&
-                it['sport']['name'] != 'National Basketball Association'
-    }.collect { team ->
-        return [
-                'team'           : team['name'],
-                'abbreviation'   : team['abbreviation'],
-                'division'       : team['division']['name'],
-                'league'         : team['league']['name'],
-                'level'          : team['sport']['name'],
-                'firstYearOfPlay': Integer.parseInt(team['firstYearOfPlay']),
-                'divisionId'     : team['division']['id'],
-                'leagueId'       : team['league']['id'],
-                'id'             : team['id']
-        ]
-    }.findAll { it.level == 'Major League Baseball' }
+    mlbTeams = new JsonSlurperClassic().parseText(jsonStr)
 
     assert mlbTeams.size() == 30
 

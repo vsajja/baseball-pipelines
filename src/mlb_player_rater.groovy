@@ -25,9 +25,6 @@ def thirdBaseman = []
 def shortStops = []
 
 @Field
-def hitters = []
-
-@Field
 def pitchers = []
 
 @Field
@@ -64,35 +61,30 @@ node('master') {
         copyArtifacts filter: '*.json', fingerprintArtifacts: true, projectName: 'get-mlb-player-hitting-stats'
         copyArtifacts filter: '*.json', fingerprintArtifacts: true, projectName: 'get-mlb-player-pitching-stats'
 
-        mlbTeams.each { mlbTeam ->
-            def teamCode = mlbTeam['abbreviation']
-            // def teamCode = 'LAA'
+//        mlbTeams.each { mlbTeam ->
+//            def teamCode = mlbTeam['abbreviation']
+        def teamCode = 'LAA'
 
-            def teamRosterJsonStr = readFile("${teamCode}-roster.json")
-            def teamHittingStatsJsonStr = readFile("${teamCode}-hitting-stats.json")
-            def teamPitchingStatsJsonStr = readFile("${teamCode}-pitching-stats.json")
+        def teamRosterJsonStr = readFile("${teamCode}-roster.json")
+        def teamHittingStatsJsonStr = readFile("${teamCode}-hitting-stats.json")
+        def teamPitchingStatsJsonStr = readFile("${teamCode}-pitching-stats.json")
 
-            def teamRoster = new JsonSlurperClassic().parseText(teamRosterJsonStr)
-            def teamHittingStats = new JsonSlurperClassic().parseText(teamHittingStatsJsonStr)
-            def teamPitchingStats = new JsonSlurperClassic().parseText(teamPitchingStatsJsonStr)
+        def teamRoster = new JsonSlurperClassic().parseText(teamRosterJsonStr)
+        def teamHittingStats = new JsonSlurperClassic().parseText(teamHittingStatsJsonStr)
+        def teamPitchingStats = new JsonSlurperClassic().parseText(teamPitchingStatsJsonStr)
 
-            mlbPlayers.addAll(teamRoster)
-            hittingStats.putAll(teamHittingStats)
-            pitchingStats.putAll(teamPitchingStats)
+        mlbPlayers.addAll(teamRoster)
+        hittingStats.putAll(teamHittingStats)
+        pitchingStats.putAll(teamPitchingStats)
 
-            println mlbPlayers.collect { it['position'] }.unique()
-        }
+        println mlbPlayers.collect { it['position'] }.unique()
+//        }
     }
 
     stage('GetCatchers') {
         catchers = mlbPlayers.findAll { it['position'] == 'C' }
 
         def ratedCatchers = getRatedPlayer(catchers)
-
-        // catchers rated by their roto score
-        println ratedCatchers.collect {
-            return "${it['nameFirst']} ${it['nameLast']} ${it['rotoScore']} ${it['zScore']}"
-        }.join('\n')
 
         writeFile file: "C-rated.json", text: new JsonBuilder(ratedCatchers).toPrettyString()
     }
@@ -108,9 +100,9 @@ node('master') {
     stage('GetDesignatedHitters') {
         designatedHitters = mlbPlayers.findAll { it['position'] == 'DH' }
 
-         def ratedPlayers = getRatedPlayer(designatedHitters)
+        def ratedPlayers = getRatedPlayer(designatedHitters)
 
-        writeFile file: "DH-rated.json", text: new JsonBuilder(designatedHitters).toPrettyString()
+        writeFile file: "DH-rated.json", text: new JsonBuilder(ratedPlayers).toPrettyString()
     }
 
     stage('GetSecondBaseman') {
@@ -156,19 +148,63 @@ node('master') {
     stage('AllPlayers') {
         def allPlayers = []
 
+        // hitters
         allPlayers.addAll(catchers)
         allPlayers.addAll(firstBaseman)
         allPlayers.addAll(secondBaseman)
         allPlayers.addAll(shortStops)
         allPlayers.addAll(thirdBaseman)
         allPlayers.addAll(outFielders)
-        allPlayers.addAll(pitchers)
         allPlayers.addAll(designatedHitters)
 
-        writeFile file: "all-rated.json", text: new JsonBuilder(allPlayers).toPrettyString()
+        // pitchers (could include 2-way players)
+        allPlayers.addAll(pitchers)
+
+        allPlayers = allPlayers.sort { a, b -> b.vScore <=> a.vScore }
+
+        def allPlayersRated = allPlayers.collectWithIndex { player, index ->
+            def position = player['position']
+
+            def ratedPlayer = [
+                    "vScore"       : player['vScore'],
+                    "rotoScore"    : player['rotoScore'],
+                    "hittingScore" : player['hittingScore'],
+                    "pitchingScore": player['pitchingScore'],
+                    "nameFirst"    : player['nameFirst'],
+                    "nameLast"     : player['nameLast'],
+                    "position"     : position,
+                    "age"          : player['age'],
+                    "mlbPlayerId"  : player['mlbPlayerId'],
+                    "mlbTeamId"    : player['mlbTeamId']
+            ]
+
+            if (player['seasonHittingStats']) {
+                ratedPlayer.put("atBats", player['seasonHittingStats']['atBats'])
+                ratedPlayer.put("runs", player['seasonHittingStats']['runs'])
+                ratedPlayer.put("homeRuns", player['seasonHittingStats']['homeRuns'])
+                ratedPlayer.put("rbis", player['seasonHittingStats']['rbis'])
+                ratedPlayer.put("stolenBases", player['seasonHittingStats']['stolenBases'])
+                ratedPlayer.put("avg", player['seasonHittingStats']['avg'])
+                ratedPlayer.put("obp", player['seasonHittingStats']['obp'])
+                ratedPlayer.put("slg", player['seasonHittingStats']['slg'])
+                ratedPlayer.put("ops", player['seasonHittingStats']['ops'])
+            }
+
+            if (player['seasonPitchingStats']) {
+                ratedPlayer.put("wins", player['seasonPitchingStats']['wins'])
+                ratedPlayer.put("saves", player['seasonPitchingStats']['saves'])
+                ratedPlayer.put("strikeOuts", player['seasonPitchingStats']['strikeOuts'])
+                ratedPlayer.put("era", player['seasonPitchingStats']['era'])
+                ratedPlayer.put("whip", player['seasonPitchingStats']['whip'])
+            }
+
+            return ratedPlayer
+        }
+
+        writeFile file: "all-rated.json", text: new JsonBuilder(allPlayersRated).toPrettyString()
 
         // currently used for vinny's fantasy baseball
-        writeFile file: "player_ratings-rated.json", text: new JsonBuilder(['data': allPlayers]).toPrettyString()
+        writeFile file: "player_ratings-rated.json", text: new JsonBuilder(['data': allPlayersRated]).toPrettyString()
     }
 
     stage('PlayerRatings') {
@@ -178,7 +214,7 @@ node('master') {
 
 @NonCPS
 def getRatedPlayer(players) {
-    if(players != null && players.size() > 0) {
+    if (players != null && players.size() > 0) {
         println players
         println players.class
 
@@ -223,7 +259,7 @@ def getRatedPlayer(players) {
         )
         def mean = rotoScores.sum() / rotoScores.size()
 
-        // add z-score
+        // add v-score
         players = players.collect { catcher ->
             println "${catcher['nameFirst']} ${catcher['nameLast']}"
 
@@ -234,7 +270,7 @@ def getRatedPlayer(players) {
 
             catcher.put('vScore', vScore)
             return catcher
-        }.sort { a, b -> b.zScore <=> a.zScore }
+        }
 
         return players
     }
@@ -244,7 +280,7 @@ def getRatedPlayer(players) {
 def getHittingScore(seasonHittingStats) {
     println seasonHittingStats
 
-    if(seasonHittingStats != null) {
+    if (seasonHittingStats != null) {
         def season = seasonHittingStats['season']
 
         assert season == 2021
@@ -292,7 +328,7 @@ def getHittingScore(seasonHittingStats) {
 def getPitchingScore(seasonPitchingStats) {
     println seasonPitchingStats
 
-    if(seasonPitchingStats != null) {
+    if (seasonPitchingStats != null) {
         def season = seasonPitchingStats['season']
 
         assert season == 2021
